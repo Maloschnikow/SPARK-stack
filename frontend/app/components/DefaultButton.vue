@@ -8,16 +8,19 @@
 
     interface Props {
         urgency?: Urgency
+        disabled?: boolean
     }
 
     const props = withDefaults(defineProps<Props>(), {
-        urgency: Urgency.Normal
+        urgency: Urgency.Normal,
+        disabled: false
     });
 
 </script>
 
 <template>
-    <button :class="props.urgency"><slot /></button>
+    <button v-if="!disabled" :class="props.urgency"><slot /></button>
+    <button v-else disabled="true" :class="props.urgency"><slot /></button>
 </template>
 
 <style scoped>
