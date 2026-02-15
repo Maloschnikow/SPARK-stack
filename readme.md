@@ -2,7 +2,7 @@
 [![CI](https://github.com/Maloschnikow/SPARK-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/Maloschnikow/SPARK-stack/actions/workflows/ci.yml)
 
 # SPARK
-Hello friend.  
+Hello friend.\
 SPARK is an interactive map which supports rescue services in major disaster situations.
 
 > [!IMPORTANT]
@@ -35,7 +35,9 @@ Here's a quick overview over what you can find where in this repository.
 Is contained in the `frontend` directory. (`cd frontend/`)
 
 Audit packages with `npm audit` and `npm audit fix`.\
-Run with `npm run dev`.
+First run `npm ci` to install packages.\
+Then use `npm run dev` to start a development server.\
+Check formatting and lint with `npm run lint`. Apply auto fixes with `npm run lint:fix`.
 
 ### Backend
 Is contained in the `backend` directory. (`cd backend/`)
