@@ -104,6 +104,7 @@ jobs:
           # cargo command, requires database
           [
             ["lint"],
+            ["typecheck"],
             ["build"]
           ]
     steps:
