@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Urgency } from '../types/Urgency'
+import { Urgency } from '../types/Urgency';
 
-const emit = defineEmits(['delete'])
+const emit = defineEmits(['delete']);
 
 const handleDelete = () => {
-  emit('delete')
-}
+  emit('delete');
+};
 </script>
 
 <template>

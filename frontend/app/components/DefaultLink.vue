@@ -1,13 +1,13 @@
 <script setup lang="ts">
 interface Props {
-  external?: boolean
-  to?: string
+  external?: boolean;
+  to?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   external: false,
   to: '#',
-})
+});
 </script>
 
 <template>

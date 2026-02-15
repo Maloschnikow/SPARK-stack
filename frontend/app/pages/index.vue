@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Urgency } from '~/components/types/Urgency'
+import { Urgency } from '~/components/types/Urgency';
 </script>
 
 <template>

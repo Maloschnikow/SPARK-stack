@@ -7,14 +7,14 @@ enum Urgency {
 }
 
 interface Props {
-  urgency?: Urgency
-  disabled?: boolean
+  urgency?: Urgency;
+  disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   urgency: Urgency.Normal,
   disabled: false,
-})
+});
 </script>
 
 <template>
