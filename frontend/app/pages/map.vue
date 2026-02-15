@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, type Ref, onUnmounted, h, render } from 'vue'
-import type { MapMouseEvent, Popup, Map, Marker, LngLat, type SourceSpecification, type Source } from 'maplibre-gl'
+import type { MapMouseEvent, Popup, Map, Marker, LngLat } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Urgency } from '~/components/types/Urgency'
 import MapMarkerPopup from '~/components/map/MapMarkerPopup.vue'
@@ -87,6 +87,7 @@ watch(selectedMapSytle,
 
       <div
         v-for="style in availableMapStyles"
+        :key="style.name"
         style="display: inline; width:max-content;"
       >
         <DefaultButton
