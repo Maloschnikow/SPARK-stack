@@ -26,18 +26,11 @@ jobs:
   # instead called by this workflow.
   # Else the nix cache might try to build two times simutaniously.
     
-  build-cache-nix:
-    runs-on: ubuntu-latest
-    steps: 
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/nix-cache
-
-  audit:
-    needs: build-cache-nix
-    uses: ./.github/workflows/audit.yml
+  build-cache-nix-ci:
+    uses: ./.github/workflows/nix-cache.yml
 
   backend-checks:
-    needs: build-cache-nix
+    needs: build-cache-nix-ci
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -60,7 +53,7 @@ jobs:
           working-directory: backend/
 
   frontend-checks:
-    needs: build-cache-nix
+    needs: build-cache-nix-ci
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

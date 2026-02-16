@@ -1,10 +1,21 @@
 name: Audit
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "30 6 * * 1" # "At 06:30 on Monday."
-  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}@${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+
+  build-cache-nix-audit:
+    uses: ./.github/workflows/nix-cache.yml
+
   backend-audit:
     runs-on: ubuntu-latest
     steps:
@@ -17,6 +28,7 @@ jobs:
           TOKEN:
 
   frontend-audit:
+    needs: build-cache-nix-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
