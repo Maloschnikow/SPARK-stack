@@ -6,6 +6,7 @@ on:
     branches: [main]
   schedule:
     - cron: "30 6 * * 1" # "At 06:30 on Monday."
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}@${{ github.head_ref || github.ref }}
