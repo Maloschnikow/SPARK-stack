@@ -2,9 +2,19 @@ name: Audit
 on:
   schedule:
     - cron: "30 6 * * 1" # "At 06:30 on Monday."
-  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
+  build-cache-nix-audit:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/nix-cache
+
   backend-audit:
     runs-on: ubuntu-latest
     steps:
@@ -17,6 +27,7 @@ jobs:
           TOKEN:
 
   frontend-audit:
+    needs: build-cache-nix-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
