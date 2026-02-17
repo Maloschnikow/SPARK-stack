@@ -7,8 +7,6 @@ description: |
 runs:
   using: composite
   steps:
-    #- uses: actions/checkout@v6
-
     - name: Cache Nix
       uses: actions/cache@v5
       id: nix-cache
@@ -28,4 +26,7 @@ runs:
         # Get Nix store paths of the flake's runtime closure (dependencies required to run the devShell)
         STORE_PATHS=$(nix path-info -r $(nix build --no-link --print-out-paths .#devShells.$(nix eval --impure --raw --expr 'builtins.currentSystem').default))
         nix-store --export $STORE_PATHS > /tmp/nix-cache
+
+        text="No cache with primary key ${{ steps.nix-cache.outputs.cache-primary-key }} was found, so a new cache was created."
+        echo "::notice title=Nix Cache::$text"
       shell: bash
