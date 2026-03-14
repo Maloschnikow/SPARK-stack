@@ -1,3 +1,3 @@
 <template>
-  <Login :error="'Test Error'" />
+  <LoginForm :error="'Test Error'" />
 </template>
