@@ -16,7 +16,6 @@ inputs:
 runs:
   using: composite
   steps:
-    #- uses: actions/checkout@v6
     - uses: cachix/install-nix-action@v31
 
     - name: Cache Nix
@@ -27,8 +26,8 @@ runs:
         key: ${{ runner.os }}-nix-cache-${{ hashFiles('flake.lock', 'flake.nix', 'nix/**') }}
 
     - run: |
-        echo No Cache found, but one should have been saved
-        exit 1
+        text="No cache with primary key ${{ steps.nix-cache.outputs.cache-primary-key }} found!"
+        echo "::warning::$text"
       if: steps.nix-cache.outputs.cache-hit != 'true'
       shell: bash
     
