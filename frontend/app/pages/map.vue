@@ -3,6 +3,10 @@ import { ref, onMounted, type Ref, onUnmounted, h, render } from 'vue';
 import { type MapMouseEvent, Popup, Map, Marker, LngLat } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import MapMarkerPopup from '~/components/map/MapMarkerPopup.vue';
+import cursorSvg from '~/assets/svgs/cursor.svg?raw';
+import dotSvg from '~/assets/svgs/dot.svg?raw';
+import lineSvg from '~/assets/svgs/line.svg?raw';
+import trashSvg from '~/assets/svgs/trash.svg?raw';
 
 interface MapStyle {
   name: string;
@@ -18,13 +22,13 @@ const availableMapStyles: MapStyle[] = [
   { name: 'Germany Grayscale', url: 'https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_gry.json' },
 ];
 
-const initialMapStyleUrl = availableMapStyles[0]?.url ?? '';
-const selectedMapStyleUrl = ref(initialMapStyleUrl);
+const initialMapStyleUrl: string = availableMapStyles[0]?.url ?? '';
+const selectedMapStyleUrl = ref<string>(initialMapStyleUrl);
 const mapContainer: Ref<HTMLElement | null> = ref(null);
 const map: Ref<Map | null> = ref(null);
-const hoveredCoordinates = ref('');
+const hoveredCoordinates = ref<string>('');
 const activePanel = ref<PanelName>('map');
-const isSidebarCollapsed = ref(false);
+const isSidebarCollapsed = ref<boolean>(false);
 
 const createMarker = (lng: number, lat: number) => {
   if (!map.value) return;
@@ -110,67 +114,28 @@ onUnmounted(() => {
           type="button"
           title="Select"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"
-              fill="currentColor"
-            />
-          </svg>
+          <span v-html="cursorSvg" />
         </button>
         <button
           class="tool-btn"
           type="button"
           title="Point"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r="5"
-              fill="currentColor"
-            />
-          </svg>
+          <span v-html="dotSvg" />
         </button>
         <button
           class="tool-btn"
           type="button"
           title="Draw"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <line
-              x1="4"
-              y1="20"
-              x2="20"
-              y2="4"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            />
-          </svg>
+          <span v-html="lineSvg" />
         </button>
         <button
           class="tool-btn"
           type="button"
           title="Erase"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-              fill="currentColor"
-            />
-          </svg>
+          <span v-html="trashSvg" />
         </button>
       </aside>
 
@@ -314,6 +279,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   color: var(--text);
+  /* Space Grotesk by Florian Karsten — https://github.com/floriankarsten/space-grotesk */
   font-family: "Space Grotesk", system-ui, sans-serif;
   background:
     radial-gradient(900px 500px at 100% 0%, rgba(224, 72, 60, 0.1), transparent 60%),
@@ -388,6 +354,10 @@ onUnmounted(() => {
   place-items: center;
   cursor: pointer;
   transition: 140ms ease;
+}
+
+.tool-btn span {
+  display: contents;
 }
 
 .tool-btn svg {
