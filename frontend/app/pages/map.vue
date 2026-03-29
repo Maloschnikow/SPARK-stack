@@ -23,12 +23,12 @@ const availableMapStyles: MapStyle[] = [
 ];
 
 const initialMapStyleUrl: string = availableMapStyles[0]?.url ?? '';
-const selectedMapStyleUrl = ref<string>(initialMapStyleUrl);
+const selectedMapStyleUrl: Ref<string> = ref<string>(initialMapStyleUrl);
 const mapContainer: Ref<HTMLElement | null> = ref(null);
 const map: Ref<Map | null> = ref(null);
-const hoveredCoordinates = ref<string>('');
-const activePanel = ref<PanelName>('map');
-const isSidebarCollapsed = ref<boolean>(false);
+const hoveredCoordinates: Ref<string> = ref<string>('');
+const activePanel: Ref<PanelName> = ref<PanelName>('map');
+const isSidebarCollapsed: Ref<boolean> = ref<boolean>(false);
 
 const createMarker = (lng: number, lat: number) => {
   if (!map.value) return;
