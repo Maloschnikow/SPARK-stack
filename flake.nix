@@ -41,7 +41,7 @@
               clorinde
 
               # for frontend
-              nodePackages.nodejs
+              nodejs_24
 
               act # To run github workflows locally
             ]
