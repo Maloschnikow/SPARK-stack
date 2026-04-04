@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, type Ref, onUnmounted, h, render } from 'vue';
-import { type MapMouseEvent, Popup, Map, Marker, LngLat } from 'maplibre-gl';
+import { ref, onMounted, type Ref, onUnmounted, h, render, watch } from 'vue';
+import { type MapMouseEvent, Popup, Map, Marker, LngLat, type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import MapMarkerPopup from '~/components/map/MapMarkerPopup.vue';
 import cursorSvg from '~/assets/svgs/cursor.svg?raw';
 import dotSvg from '~/assets/svgs/dot.svg?raw';
 import lineSvg from '~/assets/svgs/line.svg?raw';
 import trashSvg from '~/assets/svgs/trash.svg?raw';
+import { buildGrid, autoGridOptions, latLngToMgrs } from '~/utils/utm';
 
 interface MapStyle {
   name: string;
@@ -27,9 +28,20 @@ const selectedMapStyleUrl: Ref<string> = ref<string>(initialMapStyleUrl);
 const mapContainer: Ref<HTMLElement | null> = ref(null);
 const map: Ref<Map | null> = ref(null);
 const hoveredCoordinates: Ref<string> = ref<string>('');
+const hoveredMgrs: Ref<string> = ref<string>('');
 const activePanel: Ref<PanelName> = ref<PanelName>('map');
 const isSidebarCollapsed: Ref<boolean> = ref<boolean>(false);
 
+// ─── Grid settings ────────────────────────────────────────────────────────
+const gridEnabled   = ref(false);
+const gridType      = ref<'mgrs' | 'utm'>('mgrs');
+const gridPrecision = ref<'auto' | '100000' | '10000' | '1000' | '100'>('auto');
+const showGzd       = ref(true);
+const showLabels    = ref(true);
+const gridOpacity   = ref(0.75);
+const gridColor     = ref('#ffffff');
+
+// ─── Marker helper ────────────────────────────────────────────────────────
 const createMarker = (lng: number, lat: number) => {
   if (!map.value) return;
 
@@ -55,6 +67,118 @@ const createMarker = (lng: number, lat: number) => {
   marker.addTo(map.value);
 };
 
+// ─── Grid layer management ────────────────────────────────────────────────
+function initGridLayers(): void {
+  if (!map.value) return;
+
+  // Clean up if layers already exist (e.g. after style change)
+  for (const id of ['grid-labels-layer', 'grid-sub', 'grid-100k', 'grid-gzd']) {
+    if (map.value.getLayer(id)) map.value.removeLayer(id);
+  }
+  for (const id of ['grid-lines', 'grid-labels']) {
+    if (map.value.getSource(id)) map.value.removeSource(id);
+  }
+
+  map.value.addSource('grid-lines',  { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.value.addSource('grid-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+  map.value.addLayer({
+    id: 'grid-gzd',
+    type: 'line',
+    source: 'grid-lines',
+    filter: ['==', ['get', 'kind'], 'gzd'],
+    paint: { 'line-color': gridColor.value, 'line-width': 1.5, 'line-opacity': gridOpacity.value },
+  });
+  map.value.addLayer({
+    id: 'grid-100k',
+    type: 'line',
+    source: 'grid-lines',
+    filter: ['==', ['get', 'kind'], '100k'],
+    paint: { 'line-color': gridColor.value, 'line-width': 1.0, 'line-opacity': gridOpacity.value },
+  });
+  map.value.addLayer({
+    id: 'grid-sub',
+    type: 'line',
+    source: 'grid-lines',
+    filter: ['==', ['get', 'kind'], 'sub'],
+    paint: { 'line-color': gridColor.value, 'line-width': 0.5, 'line-opacity': gridOpacity.value },
+  });
+  map.value.addLayer({
+    id: 'grid-labels-layer',
+    type: 'symbol',
+    source: 'grid-labels',
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': ['match', ['get', 'kind'], 'gzd', 13, 10],
+      'text-padding': 2,
+      'text-allow-overlap': false,
+    },
+    paint: {
+      'text-color': gridColor.value,
+      'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-width': 2,
+      'text-opacity': gridOpacity.value,
+    },
+  });
+
+  updateGrid();
+}
+
+function updateGrid(): void {
+  if (!map.value) return;
+  const empty = { type: 'FeatureCollection' as const, features: [] };
+  const linesSrc  = map.value.getSource('grid-lines')  as GeoJSONSource | undefined;
+  const labelsSrc = map.value.getSource('grid-labels') as GeoJSONSource | undefined;
+  if (!linesSrc || !labelsSrc) return;
+
+  if (!gridEnabled.value) {
+    linesSrc.setData(empty);
+    labelsSrc.setData(empty);
+    return;
+  }
+
+  const bounds = map.value.getBounds();
+  const zoom   = map.value.getZoom();
+
+  let show100k: boolean;
+  let subInterval: number;
+
+  if (gridPrecision.value === 'auto') {
+    const ag = autoGridOptions(zoom);
+    show100k    = ag.show100k;
+    subInterval = ag.subInterval;
+  } else {
+    const prec = parseInt(gridPrecision.value, 10);
+    show100k    = prec <= 100_000;
+    subInterval = prec < 100_000 ? prec : 0;
+  }
+
+  const result = buildGrid(
+    bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(),
+    { showGzd: showGzd.value, show100k, subInterval, showLabels: showLabels.value },
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  linesSrc.setData(result.lines as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  labelsSrc.setData(result.labelPoints as any);
+}
+
+function applyGridStyle(): void {
+  if (!map.value) return;
+  for (const id of ['grid-gzd', 'grid-100k', 'grid-sub']) {
+    if (!map.value.getLayer(id)) continue;
+    map.value.setPaintProperty(id, 'line-color',   gridColor.value);
+    map.value.setPaintProperty(id, 'line-opacity',  gridOpacity.value);
+  }
+  if (map.value.getLayer('grid-labels-layer')) {
+    map.value.setPaintProperty('grid-labels-layer', 'text-color',   gridColor.value);
+    map.value.setPaintProperty('grid-labels-layer', 'text-opacity',  gridOpacity.value);
+  }
+}
+
+// ─── Map init ─────────────────────────────────────────────────────────────
 onMounted(() => {
   if (!selectedMapStyleUrl.value) return;
 
@@ -71,14 +195,34 @@ onMounted(() => {
   });
 
   map.value.on('mousemove', (e: MapMouseEvent) => {
-    hoveredCoordinates.value = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
+    const { lat, lng } = e.lngLat;
+    hoveredCoordinates.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    hoveredMgrs.value = latLngToMgrs(lat, lng, 5);
     map.value!.getCanvas().style.cursor = 'default';
+  });
+
+  map.value.once('load', () => {
+    initGridLayers();
+    map.value!.on('moveend', updateGrid);
   });
 });
 
-watch(selectedMapStyleUrl, (newMapStyleUrl) => {
-  map.value?.setStyle(newMapStyleUrl);
+// Style change → re-add grid layers after style loads
+watch(selectedMapStyleUrl, (newUrl) => {
+  if (!map.value) return;
+  map.value.setStyle(newUrl);
+  const onStyleData = () => {
+    if (map.value?.isStyleLoaded()) {
+      map.value.off('styledata', onStyleData);
+      initGridLayers();
+    }
+  };
+  map.value.on('styledata', onStyleData);
 });
+
+// Grid settings changes
+watch([gridEnabled, showGzd, gridPrecision, showLabels, gridType], updateGrid);
+watch([gridColor, gridOpacity], applyGridStyle);
 
 onUnmounted(() => {
   map.value?.remove();
@@ -194,6 +338,7 @@ onUnmounted(() => {
             </nav>
 
             <div class="sidebar-panels">
+              <!-- ── Map panel ──────────────────────────────────── -->
               <div
                 v-show="activePanel === 'map'"
                 class="sidebar-panel"
@@ -212,6 +357,7 @@ onUnmounted(() => {
                 </select>
               </div>
 
+              <!-- ── Grid panel ─────────────────────────────────── -->
               <div
                 v-show="activePanel === 'grid'"
                 class="sidebar-panel"
@@ -219,11 +365,114 @@ onUnmounted(() => {
                 <h3 class="panel-title">
                   Grid
                 </h3>
-                <p class="info-text">
-                  Grid settings area.
-                </p>
+
+                <!-- Enable toggle -->
+                <div class="setting-row">
+                  <span class="setting-label">Grid anzeigen</span>
+                  <label class="toggle-switch">
+                    <input
+                      v-model="gridEnabled"
+                      type="checkbox"
+                    >
+                    <span class="toggle-track"><span class="toggle-thumb" /></span>
+                  </label>
+                </div>
+
+                <template v-if="gridEnabled">
+                  <!-- Grid type -->
+                  <div class="setting-row">
+                    <span class="setting-label">Typ</span>
+                    <select
+                      v-model="gridType"
+                      class="setting-select"
+                    >
+                      <option value="mgrs">
+                        MGRS
+                      </option>
+                      <option value="utm">
+                        UTM
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Precision -->
+                  <div class="setting-row">
+                    <span class="setting-label">Genauigkeit</span>
+                    <select
+                      v-model="gridPrecision"
+                      class="setting-select"
+                    >
+                      <option value="auto">
+                        Automatisch
+                      </option>
+                      <option value="100000">
+                        100 km
+                      </option>
+                      <option value="10000">
+                        10 km
+                      </option>
+                      <option value="1000">
+                        1 km
+                      </option>
+                      <option value="100">
+                        100 m
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Zone boundaries -->
+                  <div class="setting-row">
+                    <span class="setting-label">Zonengrenzen (GZD)</span>
+                    <label class="toggle-switch">
+                      <input
+                        v-model="showGzd"
+                        type="checkbox"
+                      >
+                      <span class="toggle-track"><span class="toggle-thumb" /></span>
+                    </label>
+                  </div>
+
+                  <!-- Labels -->
+                  <div class="setting-row">
+                    <span class="setting-label">Beschriftung</span>
+                    <label class="toggle-switch">
+                      <input
+                        v-model="showLabels"
+                        type="checkbox"
+                      >
+                      <span class="toggle-track"><span class="toggle-thumb" /></span>
+                    </label>
+                  </div>
+
+                  <!-- Opacity -->
+                  <div class="setting-row">
+                    <span class="setting-label">Deckkraft</span>
+                    <div class="setting-right">
+                      <input
+                        v-model.number="gridOpacity"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        class="setting-slider"
+                      >
+                      <span class="setting-value">{{ Math.round(gridOpacity * 100) }}%</span>
+                    </div>
+                  </div>
+
+                  <!-- Color -->
+                  <div class="setting-row">
+                    <span class="setting-label">Farbe</span>
+                    <input
+                      v-model="gridColor"
+                      type="color"
+                      class="setting-color"
+                    >
+                  </div>
+                </template>
               </div>
 
+              <!-- ── Layers panel ───────────────────────────────── -->
               <div
                 v-show="activePanel === 'layers'"
                 class="sidebar-panel"
@@ -236,6 +485,7 @@ onUnmounted(() => {
                 </p>
               </div>
 
+              <!-- ── Objects panel ──────────────────────────────── -->
               <div
                 v-show="activePanel === 'objects'"
                 class="sidebar-panel"
@@ -252,7 +502,12 @@ onUnmounted(() => {
         </aside>
 
         <div class="coordinates-display">
-          {{ hoveredCoordinates }}
+          <template v-if="gridEnabled && gridType === 'mgrs' && hoveredMgrs">
+            {{ hoveredMgrs }}
+          </template>
+          <template v-else>
+            {{ hoveredCoordinates }}
+          </template>
         </div>
       </main>
     </div>
@@ -464,7 +719,7 @@ onUnmounted(() => {
 }
 
 .panel-title {
-  margin: 0 0 10px 0;
+  margin: 0 0 12px 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -496,8 +751,111 @@ select {
   border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
+/* ── Grid settings ───────────────────────────────────────────────────────── */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.setting-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.setting-select {
+  width: auto;
+  flex: 1;
+  max-width: 130px;
+  padding: 5px 8px;
+  font-size: 11px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+
+.setting-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setting-slider {
+  width: 80px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.setting-value {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 30px;
+  text-align: right;
+}
+
+.setting-color {
+  width: 36px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ── Toggle switch ───────────────────────────────────────────────────────── */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background 0.18s, border-color 0.18s;
+}
+
+.toggle-thumb {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  top: 3px;
+  left: 3px;
+  transition: transform 0.18s, background 0.18s;
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 980px) {
   .spark-map-page {
     height: calc(100vh - 48px);
