@@ -13,6 +13,16 @@ interface MapStyle {
   url: string;
 }
 
+interface OverlayLayer {
+  id: string;
+  name: string;
+  source: string;
+  tiles: string[];
+  attribution: string;
+  tileSize?: number;
+  opacity?: number;
+}
+
 type PanelName = 'map' | 'grid' | 'layers' | 'objects';
 
 const availableMapStyles: MapStyle[] = [
@@ -22,6 +32,53 @@ const availableMapStyles: MapStyle[] = [
   { name: 'Germany Grayscale', url: 'https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_gry.json' },
 ];
 
+// Layer-Attributionen werden automatisch im MapLibre-Attributions-Control angezeigt
+const availableOverlayLayers: OverlayLayer[] = [
+  {
+    id: 'openrailwaymap',
+    name: 'Eisenbahn',
+    source: 'OpenRailwayMap',
+    // © OpenRailwayMap contributors, CC BY-SA 2.0 — Pflichtangabe: Quelle im Attributions-Control
+    tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
+    attribution: '© <a href="https://www.openrailwaymap.org">OpenRailwayMap</a> & <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
+    tileSize: 256,
+    opacity: 0.85,
+  },
+  {
+    id: 'wanderwege',
+    name: 'Wanderwege',
+    source: 'Waymarked Trails',
+    // © Waymarked Trails (Sarah Hoffmann), CC BY-SA — Pflichtangabe
+    tiles: ['https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png'],
+    attribution: '© <a href="https://waymarkedtrails.org">Waymarked Trails</a> & <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
+    tileSize: 256,
+    opacity: 0.75,
+  },
+  {
+    id: 'radwege',
+    name: 'Radwege',
+    source: 'Waymarked Trails',
+    // © Waymarked Trails (Sarah Hoffmann), CC BY-SA — Pflichtangabe
+    tiles: ['https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png'],
+    attribution: '© <a href="https://waymarkedtrails.org">Waymarked Trails</a> & <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
+    tileSize: 256,
+    opacity: 0.75,
+  },
+  {
+    id: 'gemeindegrenzen',
+    name: 'Gemeindegrenzen',
+    source: 'BKG / Geodatenzentrum',
+    // © Bundesamt für Kartographie und Geodäsie (BKG), dl-de/by-2-0 — Pflichtangabe
+    tiles: ['https://sgx.geodatenzentrum.de/wms_vg250?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=vg250_sta,vg250_lan,vg250_krs,vg250_gem&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&STYLES='],
+    attribution: '© <a href="https://www.bkg.bund.de">Bundesamt für Kartographie und Geodäsie</a> (dl-de/by-2-0)',
+    tileSize: 256,
+    opacity: 0.6,
+  },
+];
+
+// Flugverbotszonen / Lufträume: Erfordert einen kostenlosen API-Key von https://www.openaip.net
+// Tiles-URL nach Registrierung: https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png?apiKey=YOUR_KEY
+
 const initialMapStyleUrl: string = availableMapStyles[0]?.url ?? '';
 const selectedMapStyleUrl: Ref<string> = ref<string>(initialMapStyleUrl);
 const mapContainer: Ref<HTMLElement | null> = ref(null);
@@ -29,6 +86,49 @@ const map: Ref<Map | null> = ref(null);
 const hoveredCoordinates: Ref<string> = ref<string>('');
 const activePanel: Ref<PanelName> = ref<PanelName>('map');
 const isSidebarCollapsed: Ref<boolean> = ref<boolean>(false);
+const activeLayers: Ref<string[]> = ref<string[]>([]);
+
+const addOverlayLayer = (layer: OverlayLayer) => {
+  if (!map.value || map.value.getSource(layer.id)) return;
+  map.value.addSource(layer.id, {
+    type: 'raster',
+    tiles: layer.tiles,
+    tileSize: layer.tileSize ?? 256,
+    attribution: layer.attribution,
+  });
+  map.value.addLayer({
+    id: layer.id,
+    type: 'raster',
+    source: layer.id,
+    paint: { 'raster-opacity': layer.opacity ?? 0.8 },
+  });
+};
+
+const removeOverlayLayer = (layerId: string) => {
+  if (!map.value) return;
+  if (map.value.getLayer(layerId)) map.value.removeLayer(layerId);
+  if (map.value.getSource(layerId)) map.value.removeSource(layerId);
+};
+
+const applyActiveLayers = () => {
+  for (const layer of availableOverlayLayers) {
+    if (activeLayers.value.includes(layer.id)) {
+      addOverlayLayer(layer);
+    }
+  }
+};
+
+const toggleLayer = (layerId: string) => {
+  const index = activeLayers.value.indexOf(layerId);
+  if (index !== -1) {
+    activeLayers.value.splice(index, 1);
+    removeOverlayLayer(layerId);
+  } else {
+    activeLayers.value.push(layerId);
+    const layer = availableOverlayLayers.find(l => l.id === layerId);
+    if (layer) addOverlayLayer(layer);
+  }
+};
 
 const createMarker = (lng: number, lat: number) => {
   if (!map.value) return;
@@ -64,6 +164,9 @@ onMounted(() => {
     center: [10.4, 51.3],
     zoom: 6,
   });
+
+  // Re-applies overlay layers after every style change (setStyle clears custom sources)
+  map.value.on('style.load', applyActiveLayers);
 
   map.value.on('click', (e: MapMouseEvent) => {
     const { lng, lat } = e.lngLat;
@@ -199,7 +302,7 @@ onUnmounted(() => {
                 class="sidebar-panel"
               >
                 <h3 class="panel-title">
-                  Map
+                  Kartenstil
                 </h3>
                 <select v-model="selectedMapStyleUrl">
                   <option
@@ -210,6 +313,28 @@ onUnmounted(() => {
                     {{ style.name }}
                   </option>
                 </select>
+
+                <h3 class="panel-title panel-title--spaced">
+                  Overlay-Layer
+                </h3>
+                <div class="layer-list">
+                  <label
+                    v-for="layer in availableOverlayLayers"
+                    :key="layer.id"
+                    class="layer-item"
+                  >
+                    <input
+                      class="layer-checkbox"
+                      type="checkbox"
+                      :checked="activeLayers.includes(layer.id)"
+                      @change="toggleLayer(layer.id)"
+                    >
+                    <div class="layer-info">
+                      <span class="layer-name">{{ layer.name }}</span>
+                      <span class="layer-source">{{ layer.source }}</span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div
@@ -471,6 +596,10 @@ onUnmounted(() => {
   color: var(--text-dim);
 }
 
+.panel-title--spaced {
+  margin-top: 16px;
+}
+
 select {
   width: 100%;
   padding: 8px;
@@ -496,6 +625,51 @@ select {
   border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 11px;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: 140ms ease;
+  user-select: none;
+}
+
+.layer-item:hover {
+  background: var(--bg-hover);
+}
+
+.layer-checkbox {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.layer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layer-name {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.layer-source {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 @media (max-width: 980px) {
