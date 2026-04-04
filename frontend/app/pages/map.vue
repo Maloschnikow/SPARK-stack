@@ -32,10 +32,68 @@ const hoveredMgrs: Ref<string> = ref<string>('');
 const activePanel: Ref<PanelName> = ref<PanelName>('map');
 const isSidebarCollapsed: Ref<boolean> = ref<boolean>(false);
 
+// ─── Startup location dialog ──────────────────────────────────────────────
+const showStartDialog  = ref(true);
+const startQuery       = ref('');
+const startSearching   = ref(false);
+const startError       = ref('');
+
+/** Try to parse raw text as "lat, lng" or "lat lng". Returns null if not coords. */
+function parseCoords(text: string): { lat: number; lng: number } | null {
+  const clean = text.trim().replace(/[°NSEW]/gi, ' ').replace(/,/g, ' ').trim();
+  const parts  = clean.split(/\s+/).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const lat = parseFloat(parts[0]!);
+  const lng = parseFloat(parts[1]!);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+async function geocode(query: string): Promise<{ lat: number; lng: number } | null> {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+  try {
+    const res  = await fetch(url, { headers: { 'Accept-Language': 'de,en' } });
+    const data = await res.json() as Array<{ lat: string; lon: string }>;
+    if (!data.length) return null;
+    return { lat: parseFloat(data[0]!.lat), lng: parseFloat(data[0]!.lon) };
+  } catch {
+    return null;
+  }
+}
+
+async function confirmStartLocation(): Promise<void> {
+  if (!startQuery.value.trim()) {
+    startError.value = 'Bitte einen Ort oder Koordinaten eingeben.';
+    return;
+  }
+  startError.value   = '';
+  startSearching.value = true;
+
+  const coords = parseCoords(startQuery.value) ?? await geocode(startQuery.value);
+
+  startSearching.value = false;
+
+  if (!coords) {
+    startError.value = 'Ort nicht gefunden. Koordinaten als „Lat, Lng" oder Ortsname eingeben.';
+    return;
+  }
+
+  showStartDialog.value = false;
+  gridEnabled.value     = true;
+  gridPrecision.value   = '10000';   // 10 × 10 km
+
+  map.value?.flyTo({ center: [coords.lng, coords.lat], zoom: 11, speed: 1.4 });
+}
+
+function skipStartDialog(): void {
+  showStartDialog.value = false;
+}
+
 // ─── Grid settings ────────────────────────────────────────────────────────
 const gridEnabled   = ref(false);
 const gridType      = ref<'mgrs' | 'utm'>('mgrs');
-const gridPrecision = ref<'auto' | '100000' | '10000' | '1000' | '100'>('auto');
+const gridPrecision = ref<'auto' | '100000' | '10000' | '1000' | '100' | '10'>('auto');
 const showGzd       = ref(true);
 const showLabels    = ref(true);
 const gridOpacity   = ref(0.75);
@@ -68,11 +126,12 @@ const createMarker = (lng: number, lat: number) => {
 };
 
 // ─── Grid layer management ────────────────────────────────────────────────
+
 function initGridLayers(): void {
   if (!map.value) return;
 
   // Clean up if layers already exist (e.g. after style change)
-  for (const id of ['grid-labels-layer', 'grid-sub', 'grid-100k', 'grid-gzd']) {
+  for (const id of ['grid-line-labels', 'grid-labels-layer', 'grid-sub', 'grid-100k', 'grid-gzd']) {
     if (map.value.getLayer(id)) map.value.removeLayer(id);
   }
   for (const id of ['grid-lines', 'grid-labels']) {
@@ -103,13 +162,15 @@ function initGridLayers(): void {
     filter: ['==', ['get', 'kind'], 'sub'],
     paint: { 'line-color': gridColor.value, 'line-width': 0.5, 'line-opacity': gridOpacity.value },
   });
+  const gridFont = ['Noto Sans Regular', 'Arial Unicode MS Regular'];
+
   map.value.addLayer({
     id: 'grid-labels-layer',
     type: 'symbol',
     source: 'grid-labels',
     layout: {
       'text-field': ['get', 'label'],
-      'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+      'text-font': gridFont,
       'text-size': ['match', ['get', 'kind'], 'gzd', 13, 10],
       'text-padding': 2,
       'text-allow-overlap': false,
@@ -117,6 +178,32 @@ function initGridLayers(): void {
     paint: {
       'text-color': gridColor.value,
       'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-width': 2,
+      'text-opacity': gridOpacity.value,
+    },
+  });
+
+  // Labels along sub-grid lines (coordinate digits, placed on the line itself)
+  map.value.addLayer({
+    id: 'grid-line-labels',
+    type: 'symbol',
+    source: 'grid-lines',
+    filter: ['==', ['get', 'kind'], 'sub'],
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 300,
+      'text-field': ['get', 'label'],
+      'text-font': gridFont,
+      'text-size': 9,
+      'text-keep-upright': true,
+      'text-rotation-alignment': 'map',
+      'text-pitch-alignment': 'viewport',
+      'text-padding': 1,
+      'text-allow-overlap': false,
+    },
+    paint: {
+      'text-color': gridColor.value,
+      'text-halo-color': 'rgba(0,0,0,0.9)',
       'text-halo-width': 2,
       'text-opacity': gridOpacity.value,
     },
@@ -176,6 +263,10 @@ function applyGridStyle(): void {
     map.value.setPaintProperty('grid-labels-layer', 'text-color',   gridColor.value);
     map.value.setPaintProperty('grid-labels-layer', 'text-opacity',  gridOpacity.value);
   }
+  if (map.value.getLayer('grid-line-labels')) {
+    map.value.setPaintProperty('grid-line-labels', 'text-color',   gridColor.value);
+    map.value.setPaintProperty('grid-line-labels', 'text-opacity',  gridOpacity.value);
+  }
 }
 
 // ─── Map init ─────────────────────────────────────────────────────────────
@@ -187,6 +278,16 @@ onMounted(() => {
     style: selectedMapStyleUrl.value,
     center: [10.4, 51.3],
     zoom: 6,
+    // Redirect glyph requests for our grid font to maplibre's public server
+    // (the geodatenzentrum tile server doesn't serve the 0-255 ASCII range)
+    transformRequest: (url, resourceType) => {
+      if (resourceType === 'Glyphs' && url.includes('Noto%20Sans%20Regular')) {
+        const range = url.match(/\/(\d+-\d+\.pbf)$/)?.[1];
+        if (range) {
+          return { url: `https://demotiles.maplibre.org/font/Noto%20Sans%20Regular/${range}` };
+        }
+      }
+    },
   });
 
   map.value.on('click', (e: MapMouseEvent) => {
@@ -417,6 +518,9 @@ onUnmounted(() => {
                       <option value="100">
                         100 m
                       </option>
+                      <option value="10">
+                        10 m
+                      </option>
                     </select>
                   </div>
 
@@ -511,6 +615,70 @@ onUnmounted(() => {
         </div>
       </main>
     </div>
+    <!-- ── Startup location dialog ─────────────────────────────────────── -->
+    <Transition name="dialog-fade">
+      <div
+        v-if="showStartDialog"
+        class="dialog-backdrop"
+        @keydown.esc="skipStartDialog"
+      >
+        <div
+          class="dialog-box"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Einsatzort eingeben"
+        >
+          <h2 class="dialog-title">
+            Einsatzort
+          </h2>
+          <p class="dialog-desc">
+            Ort, Adresse oder Koordinaten (Breite, Länge) eingeben.<br>
+            Die Karte wird zentriert und das 10 × 10 km Grid aktiviert.
+          </p>
+
+          <form
+            class="dialog-form"
+            @submit.prevent="confirmStartLocation"
+          >
+            <input
+              ref="startInputRef"
+              v-model="startQuery"
+              class="dialog-input"
+              type="text"
+              placeholder="z. B.  München  oder  48.137, 11.576"
+              autocomplete="off"
+              autofocus
+            >
+            <p
+              v-if="startError"
+              class="dialog-error"
+            >
+              {{ startError }}
+            </p>
+            <div class="dialog-actions">
+              <button
+                class="dialog-btn secondary"
+                type="button"
+                @click="skipStartDialog"
+              >
+                Überspringen
+              </button>
+              <button
+                class="dialog-btn primary"
+                type="submit"
+                :disabled="startSearching"
+              >
+                <span
+                  v-if="startSearching"
+                  class="spinner"
+                />
+                <span v-else>Bestätigen</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Transition>
   </section>
 </template>
 
@@ -887,5 +1055,144 @@ select {
 
 :deep(.maplibregl-popup-close-button) {
   color: var(--text);
+}
+
+/* ── Startup dialog ──────────────────────────────────────────────────────── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-box {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px 22px;
+  width: min(420px, 92vw);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.dialog-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.dialog-desc {
+  margin: 0 0 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.dialog-input:focus {
+  border-color: var(--accent);
+}
+
+.dialog-input::placeholder {
+  color: var(--text-muted);
+}
+
+.dialog-error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.dialog-btn {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: 140ms ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dialog-btn.secondary {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.dialog-btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dialog-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.dialog-btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.dialog-btn.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
 }
 </style>

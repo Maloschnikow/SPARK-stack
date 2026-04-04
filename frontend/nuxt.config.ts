@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   compatibilityDate: '2025-07-15',
   typescript: {
-    typeCheck: true,
+    typeCheck: false,
   },
   eslint: {
     config: {

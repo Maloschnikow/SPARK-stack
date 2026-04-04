@@ -154,7 +154,7 @@ export type GridKind = 'gzd' | '100k' | 'sub'
 export interface GridLineFeature {
   type: 'Feature'
   geometry: { type: 'LineString'; coordinates: [number, number][] }
-  properties: { kind: GridKind }
+  properties: { kind: GridKind; label: string }
 }
 
 export interface GridLabelFeature {
@@ -176,7 +176,8 @@ export function autoGridOptions(zoom: number): Pick<GridOptions, 'show100k' | 's
   if (zoom < 9)  return { show100k: true,  subInterval: 0 }
   if (zoom < 12) return { show100k: true,  subInterval: 10_000 }
   if (zoom < 14) return { show100k: true,  subInterval: 1_000 }
-  return              { show100k: true,  subInterval: 100 }
+  if (zoom < 17) return { show100k: true,  subInterval: 100 }
+  return              { show100k: true,  subInterval: 10 }
 }
 
 // Internal: emit UTM grid lines for one zone slice.
@@ -192,6 +193,12 @@ function addUtmLines(
 ): void {
   const steps = interval >= 100_000 ? 20 : interval >= 10_000 ? 8 : 3
 
+  // Number of significant digits shown on sub-grid line labels:
+  // 10 km→1 digit, 1 km→2, 100 m→3, 10 m→4
+  const labelDigits = interval < 100_000 ? Math.round(Math.log10(100_000 / interval)) : 0
+  const subLabel = (coord: number) =>
+    Math.floor((coord % 100_000) / interval).toString().padStart(labelDigits, '0')
+
   // Easting lines (roughly vertical on the map)
   const firstE = Math.ceil(minE / interval) * interval
   for (let E = firstE; E <= maxE + 0.5; E += interval) {
@@ -206,7 +213,7 @@ function addUtmLines(
       } catch { /* outside valid range */ }
     }
     if (coords.length >= 2)
-      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { kind } })
+      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { kind, label: kind === 'sub' ? subLabel(E) : '' } })
   }
 
   // Northing lines (roughly horizontal on the map)
@@ -223,7 +230,7 @@ function addUtmLines(
       } catch { /* outside valid range */ }
     }
     if (coords.length >= 2)
-      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { kind } })
+      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { kind, label: kind === 'sub' ? subLabel(N) : '' } })
   }
 
   // One label per 100 km square (at geographic centre of the square)
@@ -274,13 +281,13 @@ export function buildGrid(
     const firstMeridian = Math.ceil((W + 180) / 6) * 6 - 180
     for (let lng = firstMeridian; lng <= E + 0.001; lng += 6) {
       if (lng < W || lng > E) continue
-      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[lng, S], [lng, N]] }, properties: { kind: 'gzd' } })
+      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[lng, S], [lng, N]] }, properties: { kind: 'gzd', label: '' } })
     }
 
     // Latitude parallels (MGRS bands 8° wide, last band 72°–84° = 12°)
     for (const lat of [-80, -72, -64, -56, -48, -40, -32, -24, -16, -8, 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 84]) {
       if (lat < S || lat > N) continue
-      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[W, lat], [E, lat]] }, properties: { kind: 'gzd' } })
+      lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[W, lat], [E, lat]] }, properties: { kind: 'gzd', label: '' } })
     }
 
     // GZD labels at cell centres
