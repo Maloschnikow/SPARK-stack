@@ -73,6 +73,14 @@
       sqlx migrate run --source "$REPO_ROOT/database/migrations"
     '')
 
+    (mkScript "db-visualize" ''
+      set -e
+      mkdir -p $REPO_ROOT/database/visual/
+      pg_dump -d $DATABASE_URL --schema-only > $REPO_ROOT/database/visual/db_dump.sql
+      npx @liam-hq/cli erd build --input $REPO_ROOT/database/visual/db_dump.sql --format postgres --output-dir $REPO_ROOT/database/visual/dist
+      npx http-server $REPO_ROOT/database/visual/dist
+    '')
+
     (mkScript "acts" ''
       act --rm --action-cache-path $REPO_ROOT/.cache/act --cache-server-path $REPO_ROOT/.cache/actcache
     '')

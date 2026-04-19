@@ -3,5 +3,7 @@
 /.cache
 /.vscode/settings.json
 
+/database/visual
+
 #backend
 /backend/target
