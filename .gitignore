@@ -1,6 +1,7 @@
 /.direnv
 /postgres
 /.cache
+/.vscode/settings.json
 
 #backend
 /backend/target
