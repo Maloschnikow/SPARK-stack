@@ -1,0 +1,20 @@
+{
+    // Rename this file to settings.json
+    "rust-analyzer.rustc.source": "backend",
+    "sqltools.connections": [
+        {
+            "name": "db",
+            "server": "localhost",
+            "driver": "PostgreSQL",
+            "connectString": "CHANGEME", // CHANGEME to output of `echo $DATABASE_URL`
+            "connectionTimeout": 15
+        },
+        {
+            "name": "db-test",
+            "server": "localhost",
+            "driver": "PostgreSQL",
+            "connectString": "CHANGEME", // CHANGEME to output of `echo $DATABASE_TEST_URL`
+            "connectionTimeout": 15
+        }
+    ]
+}
