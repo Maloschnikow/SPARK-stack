@@ -59,6 +59,8 @@ The Nix environment provides some commands to control the database:
 > `db-upgrade` - migrate database upwards (apply every migration)
 >
 > `db-downgrade` - migrate database downwards (one migration at a time)
+>
+> `db-visualize` - creates an ERD to look at
 
 #### Migrations
 [sqlx-cli](https://github.com/launchbadge/sqlx/tree/main/sqlx-cli) is used for migrations.

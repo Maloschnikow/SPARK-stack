@@ -24,9 +24,6 @@
 
         shellScripts = import ./nix/scripts.nix { inherit pkgs; };
 
-        go-migrate-pg = pkgs.go-migrate.overrideAttrs(oldAttrs: {
-          tags = ["postgres"];
-        });
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs;
@@ -50,8 +47,6 @@
           RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           shellHook = ''
             export REPO_ROOT=$(git rev-parse --show-toplevel)
-            echo REPO_ROOT=$REPO_ROOT =================================================================================================
-            echo PWD=$PWD =============================================================================================================
             export PG_DIR=$REPO_ROOT/postgres
             export PG_DATA_DIR=$PG_DIR/.pgdata
             export PG_SOCKET_DIR=$PG_DIR/.pgsock
