@@ -34,3 +34,8 @@ runs:
         text="No cache with primary key ${{ steps.nix-cache.outputs.cache-primary-key }} was found, so a new cache was created."
         echo "::notice title=Nix Cache::$text"
       shell: bash
+
+    - name: Import Nix store cache
+      run: nix-store --import < /tmp/nix-cache
+      shell: bash
+      if: inputs.lookup-only != 'true' && steps.nix-cache.outputs.cache-hit == 'true'
