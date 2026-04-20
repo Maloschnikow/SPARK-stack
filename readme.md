@@ -61,6 +61,7 @@ The Nix environment provides some commands to control the database:
 > `db-downgrade` - migrate database downwards (one migration at a time)
 >
 > `db-visualize` - creates an ERD to look at
+> `db-test-smoke` - run a minimal schema smoke test against the (test) database
 
 #### Migrations
 [sqlx-cli](https://github.com/launchbadge/sqlx/tree/main/sqlx-cli) is used for migrations.

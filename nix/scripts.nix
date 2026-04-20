@@ -79,6 +79,27 @@
       pg_dump -d $DATABASE_URL --schema-only > $REPO_ROOT/database/visual/db_dump.sql
       npx @liam-hq/cli erd build --input $REPO_ROOT/database/visual/db_dump.sql --format postgres --output-dir $REPO_ROOT/database/visual/dist
       npx http-server $REPO_ROOT/database/visual/dist
+    (mkScript "db-test-smoke" ''
+      set -euo pipefail
+
+      if [ -z "''${DATABASE_TEST_URL:-}" ]; then
+        echo "DATABASE_TEST_URL is not set"
+        exit 1
+      fi
+
+      db-start
+
+      echo "Preparing clean test database..."
+      psql "$DATABASE_TEST_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS public CASCADE;"
+      psql "$DATABASE_TEST_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA public;"
+
+      echo "Applying migrations to test database..."
+      DATABASE_URL="$DATABASE_TEST_URL" sqlx migrate run --source "$REPO_ROOT/database/migrations"
+
+      echo "Running schema smoke test..."
+      psql "$DATABASE_TEST_URL" -v ON_ERROR_STOP=1 -f "$REPO_ROOT/database/schema_smoke.sql"
+
+      echo "db-test-smoke passed."
     '')
 
     (mkScript "acts" ''
