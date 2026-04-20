@@ -3,6 +3,10 @@ description: |
   Create a new Nix cache if none exists
   All jobs that use the cache should "need" this job/workflow
 
+inputs:
+  lookup-only:
+    type: boolean
+    default: false
 
 runs:
   using: composite
@@ -13,7 +17,7 @@ runs:
       with:
         path: /tmp/nix-cache
         key: ${{ runner.os }}-nix-cache-${{ hashFiles('flake.lock', 'flake.nix', 'nix/**') }}
-        lookup-only: true
+        lookup-only: ${{inputs.lookup-only}}
 
     - name: Install Nix
       id: nix-install

@@ -25,7 +25,9 @@ jobs:
     steps: 
       - uses: actions/checkout@v6
       - uses: ./.github/actions/nix-cache
-
+        with:
+            lookup-only: true
+      
   backend-checks:
     needs: build-cache-nix-ci
     runs-on: ubuntu-latest
@@ -44,7 +46,7 @@ jobs:
       - uses: ./.github/actions/run-in-nix-env
         with:
           commands: |
-            ${{ case(matrix.context[1] == true, 'db-start', '') }} # doesnt work yet (at least with act)
+            ${{ case(matrix.context[1] == true, 'db-start', '') }} # doesnt work yet with act
             # db-start
             cargo ${{ matrix.context[0] }}
           working-directory: backend/
