@@ -79,6 +79,8 @@
       pg_dump -d $DATABASE_URL --schema-only > $REPO_ROOT/database/visual/db_dump.sql
       npx @liam-hq/cli erd build --input $REPO_ROOT/database/visual/db_dump.sql --format postgres --output-dir $REPO_ROOT/database/visual/dist
       npx http-server $REPO_ROOT/database/visual/dist
+    '')
+
     (mkScript "db-test-smoke" ''
       set -euo pipefail
 
