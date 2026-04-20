@@ -8,6 +8,7 @@
 ### Names
 - Groups:
    - `feat` - New features
+   - `ci`- changes to the CI 
    - `fix` - Bug fixes
    - `update` - Updates to packages (e.g. Nix or Node)
    - `docs` - Documentation changes (e.g. readme)

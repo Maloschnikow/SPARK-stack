@@ -19,19 +19,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  
-  # Build the cache once per triggered workflow (if it doesn't exist).
-  # Every workflow, which needs the nix environment, needs to depend on this job.
-  # That's why the audit workflow is not simply triggered by push/pull_request, but
-  # instead called by this workflow.
-  # Else the nix cache might try to build two times simutaniously.
-    
+
   build-cache-nix-ci:
     runs-on: ubuntu-latest
     steps: 
       - uses: actions/checkout@v6
       - uses: ./.github/actions/nix-cache
-
+        with:
+            lookup-only: true
+      
   backend-checks:
     needs: build-cache-nix-ci
     runs-on: ubuntu-latest
@@ -43,15 +39,15 @@ jobs:
             # [cargo command, requires database?]
             ["fmt -- --check", false],
             ["clippy -- -D warnings --allow clippy::needless_return", false],
-            ["test", true, 'backend/'],
+            ["test", true],
           ]
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/run-in-nix-env
         with:
           commands: |
-            # $\{{ case(matrix.context[1] == true, 'db-start') }} # doesnt work yet (at least with act)
-            db-start
+            ${{ case(matrix.context[1] == true, 'db-start', '') }} # doesnt work yet with act
+            # db-start
             cargo ${{ matrix.context[0] }}
           working-directory: backend/
 

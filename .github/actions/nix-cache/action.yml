@@ -3,6 +3,10 @@ description: |
   Create a new Nix cache if none exists
   All jobs that use the cache should "need" this job/workflow
 
+inputs:
+  lookup-only:
+    type: boolean
+    default: false
 
 runs:
   using: composite
@@ -13,7 +17,7 @@ runs:
       with:
         path: /tmp/nix-cache
         key: ${{ runner.os }}-nix-cache-${{ hashFiles('flake.lock', 'flake.nix', 'nix/**') }}
-        lookup-only: true
+        lookup-only: ${{inputs.lookup-only}}
 
     - name: Install Nix
       id: nix-install
@@ -30,3 +34,8 @@ runs:
         text="No cache with primary key ${{ steps.nix-cache.outputs.cache-primary-key }} was found, so a new cache was created."
         echo "::notice title=Nix Cache::$text"
       shell: bash
+
+    - name: Import Nix store cache
+      run: nix-store --import < /tmp/nix-cache
+      shell: bash
+      if: inputs.lookup-only != 'true' && steps.nix-cache.outputs.cache-hit == 'true'
